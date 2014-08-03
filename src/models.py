@@ -74,7 +74,7 @@ class Input(object):
     def __repr__(self):
 
         repr_data = (
-            self.tx_id.encode('hex'),
+            self.tx_id[::-1].encode('hex'),
             self.output_index,
             self.script_sig.encode('hex'),
             self.sequence.encode('hex')

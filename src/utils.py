@@ -268,8 +268,8 @@ def decode_p2pkh_script(script):
     assert script[1] == OP_HASH160
     pkh_len = bytes_to_int(script[2])
     public_key_hash = script[3:3+pkh_len]
-    assert script[pkh_len+4] == OP_EQUALVERIFY
-    assert script[pkh_len+5] == OP_CHECKSIG
+    assert script[pkh_len+3] == OP_EQUALVERIFY
+    assert script[pkh_len+4] == OP_CHECKSIG
 
     return public_key_hash
 
