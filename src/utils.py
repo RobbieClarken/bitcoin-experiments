@@ -279,6 +279,13 @@ def build_pubkey_script(public_key):
             public_key +
             OP_CHECKSIG)
 
+
+def decode_target_bits(bits_data):
+    mantissa = bytes_to_int(bits_data[:-1])
+    exponent = bytes_to_int(bits_data[-1])
+    return mantissa * 2 ** ( 8 * (exponent - 3) )
+
+
 def jacobi(a, n):
 
     """

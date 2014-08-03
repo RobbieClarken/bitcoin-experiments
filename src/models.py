@@ -31,7 +31,7 @@ class Transaction(object):
         if hash_type is not None:
             tx_data += int_to_bytes(hash_type, 4)
 
-        return sha256(sha256(tx_data).digest()).digest()[::-1]
+        return sha256(sha256(tx_data).digest()).digest()
 
 
     @classmethod
@@ -92,7 +92,7 @@ class Input(object):
         signing_key = ecdsa.SigningKey.from_string(private_key,
                                                    curve=SECP256k1)
         signature = signing_key.sign_digest(
-            tx_hash[::-1],
+            tx_hash,
             sigencode=ecdsa.util.sigencode_der
         )
 
@@ -102,7 +102,7 @@ class Input(object):
 
     def data(self):
 
-        return (self.tx_id[::-1] +
+        return (self.tx_id +
                 int_to_bytes(self.output_index, 4) +
                 int_to_var_int_bytes(len(self.script_sig)) +
                 self.script_sig +
@@ -113,7 +113,7 @@ class Input(object):
     def from_data(cls, data):
 
         input = cls()
-        input.tx_id = data[31::-1]
+        input.tx_id = data[:32]
         input.output_index = bytes_to_int(data[32:36])
         script_sig_len = var_int_bytes_to_int(data[36:])
         vi_len = var_int_length(data[36:])
@@ -127,6 +127,7 @@ class Input(object):
 
 
 class Output(object):
+
 
     def __init__(self, value=None, script_pub_key=None):
 
@@ -159,3 +160,89 @@ class Output(object):
         output.script_pub_key = data[8+vi_len:8+vi_len+spk_len]
 
         return output
+
+
+class Block(object):
+
+
+    MAX_TARGET = 0xFFFF0000000000000000000000000000000000000000000000000000
+    POOL_MAX_TARGET = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+
+    @property
+    def target(self):
+        return decode_target_bits(self.bits)
+
+
+    @property
+    def difficulty(self):
+        return float(self.MAX_TARGET) / self.target
+
+
+    @property
+    def pool_difficulty(self):
+        return float(self.POOL_MAX_TARGET) / self.target
+
+
+    def data(self):
+        return (
+            int_to_bytes(self.magic_number, 4) +
+            int_to_bytes(self.block_size, 4) +
+            self.header_data() +
+            ''.join(tx.data() for tx in self.transactions)
+        )
+
+
+    def header_data(self, null_tx_count=False):
+        tx_count = 0 if null_tx_count else self.tx_count
+        return (
+            int_to_bytes(self.version, 4) +
+            self.hash_prev_block +
+            self.hash_merkle_root +
+            int_to_bytes(self.time, 4) +
+            self.bits +
+            int_to_bytes(self.nonce, 4) +
+            int_to_var_int_bytes(tx_count)
+        )
+
+
+    def hash(self):
+        data = self.header_data(null_tx_count=True)[:-1]
+        return sha256(sha256(data).digest()).digest()
+
+
+    @classmethod
+    def from_data(cls, data):
+
+        self = cls()
+
+        s, e = 0, 4
+        self.magic_number = bytes_to_int(data[s:e])
+        s, e = e, e + 4
+        self.block_size = bytes_to_int(data[s:e])
+
+        s, e = e, e + 4
+        self.version = bytes_to_int(data[s:e])
+        s, e = e, e + 32
+        self.hash_prev_block = data[s:e]
+        s, e = e, e + 32
+        self.hash_merkle_root = data[s:e]
+        s, e = e, e + 4
+        self.time = bytes_to_int(data[s:e])
+        s, e = e, e + 4
+        self.bits = data[s:e]
+        s, e = e, e + 4
+        self.nonce = bytes_to_int(data[s:e])
+
+        s = e
+        e = s + var_int_length(data[s:])
+        self.tx_count = var_int_bytes_to_int(data[s:e])
+
+        self.transactions = []
+        for i in range(self.tx_count):
+            s = e
+            tx = Transaction.from_data(data[s:])
+            self.transactions.append(tx)
+            e += len(tx.data())
+
+        return self
