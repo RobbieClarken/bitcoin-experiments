@@ -199,25 +199,32 @@ def compress_public_key(uncompressed_public_key):
     return public_key
 
 
-def public_key_to_public_key_hash(public_key):
-
+def ripemd160_sha256_hash(data):
     ripemd160 = hashlib.new('ripemd160')
-    ripemd160.update(sha256(public_key).digest())
-    public_key_hash = ripemd160.digest()
+    ripemd160.update(sha256(data).digest())
+    return ripemd160.digest()
 
-    return public_key_hash
+
+def public_key_to_public_key_hash(public_key):
+    return ripemd160_sha256_hash(public_key)
+
+
+def build_address(data, version_byte):
+    base_hash = ripemd160_sha256_hash(data)
+    ext_hash = version_byte + base_hash
+    checksum = sha256(sha256(ext_hash).digest()).digest()[:4]
+    address = base58_encode(ext_hash + checksum)
+    return address
 
 
 def public_key_to_address(public_key):
-
     version_byte = '\x6f' if config.TESTNET else '\x00'
-    public_key_hash = public_key_to_public_key_hash(public_key)
-    ext_hash = version_byte + public_key_hash
+    return build_address(public_key, version_byte)
 
-    checksum = sha256(sha256(ext_hash).digest()).digest()[:4]
-    address = base58_encode(ext_hash + checksum)
 
-    return address
+def redeem_script_to_address(redeem_script):
+    version_byte = '\xc4' if config.TESTNET else '\x05'
+    return build_address(redeem_script, version_byte)
 
 
 def private_key_to_address(private_key, compressed=True):
@@ -231,30 +238,32 @@ def address_to_public_key_hash(address):
     return public_key_hash
 
 
-def build_script_sig(signature, hash_type, public_key):
+def build_p2pkh_script_sig(signature, public_key):
 
-    sig_and_hash_type = signature + int_to_bytes(hash_type, 1)
-    script_sig = (int_to_bytes(len(sig_and_hash_type), 1) +
-                  sig_and_hash_type +
+    script_sig = (int_to_bytes(len(signature), 1) +
+                  signature +
                   int_to_bytes(len(public_key), 1) +
                   public_key)
 
     return script_sig
 
 
-def decode_script_sig(script_sig):
+def decode_p2pkh_script_sig(script_sig):
 
-    sig_len = bytes_to_int(script_sig[0]) - 1
-    signature = script_sig[1:1+sig_len]
-    hash_type = bytes_to_int(script_sig[1+sig_len])
-    public_key_len = bytes_to_int(script_sig[1+sig_len+1])
-    public_key = script_sig[1+sig_len+2:]
+    s, e = 0, 1
+    sig_len = bytes_to_int(script_sig[s:e])
+    s, e = e, e + sig_len
+    signature = script_sig[s:e]
+    s, e = e, e + 1
+    public_key_len = bytes_to_int(script_sig[s:e])
+    s, e = e, e + public_key_len
+    public_key = script_sig[s:e]
     assert len(public_key) == public_key_len
 
-    return signature, hash_type, public_key
+    return signature, public_key
 
 
-def build_p2pkh_script(public_key_hash):
+def build_p2pkh_script_pub_key(public_key_hash):
     return (OP_DUP + OP_HASH160 +
             int_to_bytes(len(public_key_hash), 1) +
             public_key_hash +
@@ -262,7 +271,7 @@ def build_p2pkh_script(public_key_hash):
             OP_CHECKSIG)
 
 
-def decode_p2pkh_script(script):
+def decode_p2pkh_script_pub_key(script):
 
     assert script[0] == OP_DUP
     assert script[1] == OP_HASH160

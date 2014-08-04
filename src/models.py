@@ -6,12 +6,29 @@ from utils import *
 class Transaction(object):
 
 
-    def __init__(self, version=1, inputs=None, outputs=None, lock_time=0):
+    def __init__(self, version=1, inputs=None,
+                 outputs=None, lock_time=0):
+
         super(Transaction, self).__init__()
         self.version = version
         self.inputs = inputs
         self.outputs = outputs
         self.lock_time = lock_time
+
+
+    def __eq__(self, other):
+
+        if not isinstance(other, Transaction):
+            return False
+
+        return (self.version == other.version and
+                self.inputs == other.inputs and
+                self.outputs == other.outputs and
+                self.lock_time == other.lock_time)
+
+
+    def __ne__(self, other):
+        return not self == other
 
 
     def data(self):
@@ -86,8 +103,29 @@ class Input(object):
                 'sequence={3})').format(*repr_data)
 
 
-    def sign_transaction(self, tx_hash, hash_type,
-                         private_key, public_key):
+    def __eq__(self, other):
+
+        if not isinstance(other, Input):
+            return False
+
+        return (self.tx_id == other.tx_id and
+                self.output_index == other.output_index and
+                self.script_sig == other.script_sig and
+                self.sequence == other.sequence)
+
+
+    def __ne__(self, other):
+        return not self == other
+
+
+    def sign_transaction(self, tx, private_key, hash_type):
+
+        tx_copy = Transaction.from_data(tx.data())
+        for input in tx_copy.inputs:
+            if input != self:
+                input.script_sig = ''
+
+        tx_hash = tx_copy.hash(hash_type)
 
         signing_key = ecdsa.SigningKey.from_string(private_key,
                                                    curve=SECP256k1)
@@ -96,8 +134,7 @@ class Input(object):
             sigencode=ecdsa.util.sigencode_der
         )
 
-        self.script_sig = build_script_sig(signature, hash_type,
-                                           public_key)
+        return signature + int_to_bytes(hash_type, 1)
 
 
     def data(self):
@@ -144,6 +181,19 @@ class Output(object):
                 'script_pub_key={1})').format(*repr_data)
 
 
+    def __eq__(self, other):
+
+        if not isinstance(other, Output):
+            return False
+
+        return (self.value == other.value and
+                self.script_pub_key == other.script_pub_key)
+
+
+    def __ne__(self, other):
+        return not self == other
+
+
     def data(self):
         return (int_to_bytes(self.value, 8) +
                 int_to_var_int_bytes(len(self.script_pub_key)) +
@@ -167,6 +217,26 @@ class Block(object):
 
     MAX_TARGET = 0xFFFF0000000000000000000000000000000000000000000000000000
     POOL_MAX_TARGET = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+
+    def __eq__(self, other):
+
+        if not isinstance(other, Block):
+            return False
+
+        return (self.magic_number == other.magic_number and
+                self.block_size == other.block_size and
+                self.hash_prev_block == other.hash_prev_block and
+                self.hash_merkle_root == other.hash_merkle_root and
+                self.time == other.time and
+                self.bits == other.bits and
+                self.nonce == other.nonce and
+                self.tx_count == other.tx_count and
+                self.transactions == other.transactions)
+
+
+    def __ne__(self, other):
+        return not self == other
 
 
     @property
